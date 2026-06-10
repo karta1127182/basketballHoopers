@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import type { ReactNode } from 'react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -260,6 +260,16 @@ export default function HomeScreen() {
   const [activeMenu, setActiveMenu] = useState<ActiveMenu>('home');
   const [menuOpen, setMenuOpen] = useState(false);
 
+  const loadDashboard = useCallback(() => {
+    if (!user) {
+      setDashboard(undefined);
+      return;
+    }
+    api<PlayerDashboard | undefined>('/profile/dashboard', { headers: { 'X-Auth-Token': user.token } })
+      .then(setDashboard)
+      .catch(() => setDashboard(undefined));
+  }, [user]);
+
   async function logout() {
     try {
       await api('/auth/logout', { method: 'POST', headers: { 'X-Auth-Token': user?.token ?? '' } });
@@ -276,14 +286,11 @@ export default function HomeScreen() {
   }
 
   useEffect(() => {
-    if (!user) {
-      setDashboard(undefined);
-      return;
-    }
-    api<PlayerDashboard | undefined>('/profile/dashboard', { headers: { 'X-Auth-Token': user.token } })
-      .then(setDashboard)
-      .catch(() => setDashboard(undefined));
-  }, [user]);
+    loadDashboard();
+    if (!user) return;
+    const timer = setInterval(loadDashboard, 15000);
+    return () => clearInterval(timer);
+  }, [loadDashboard, user]);
 
   if (!user) {
     return (
@@ -721,6 +728,7 @@ function CoursePanelV2({ user }: { user: AuthUser }) {
   const [description, setDescription] = useState('');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  const [courseFormOpen, setCourseFormOpen] = useState(false);
 
   async function loadCourses() {
     try {
@@ -770,6 +778,7 @@ function CoursePanelV2({ user }: { user: AuthUser }) {
       setCapacity('12');
       setPrice('0');
       setDescription('');
+      setCourseFormOpen(false);
       setMessage('課程已新增');
       await loadCourses();
     } catch (error) {
@@ -936,19 +945,30 @@ function CoursePanelV2({ user }: { user: AuthUser }) {
             <MetricTile label="未付款" value={`${revenue?.unpaidCount ?? 0} 人`} />
             <MetricTile label="退款" value={`${revenue?.refundedCount ?? 0} 筆`} />
           </View>
-          <View style={styles.courseForm}>
-            <Text style={styles.sectionTitle}>新增課程</Text>
-            <TextInput style={styles.courseInput} value={title} onChangeText={setTitle} placeholder="課程名稱" placeholderTextColor="#756b62" />
-            <TextInput style={styles.courseInput} value={timeText} onChangeText={setTimeText} placeholder="課程時間，例如 6/21 19:00" placeholderTextColor="#756b62" />
-            <TextInput style={styles.courseInput} value={location} onChangeText={setLocation} placeholder="課程地點" placeholderTextColor="#756b62" />
-            <View style={styles.courseFormRow}>
-              <TextInput style={[styles.courseInput, styles.courseFormField]} value={level} onChangeText={setLevel} placeholder="程度" placeholderTextColor="#756b62" />
-              <TextInput style={[styles.courseInput, styles.courseFormField]} value={capacity} onChangeText={setCapacity} keyboardType="number-pad" placeholder="名額" placeholderTextColor="#756b62" />
-              <TextInput style={[styles.courseInput, styles.courseFormField]} value={price} onChangeText={setPrice} keyboardType="number-pad" placeholder="價格" placeholderTextColor="#756b62" />
+          {!courseFormOpen ? (
+            <Pressable style={styles.courseAddButton} onPress={() => setCourseFormOpen(true)}>
+              <Text style={styles.courseActionText}>新增課程</Text>
+            </Pressable>
+          ) : (
+            <View style={styles.courseForm}>
+              <Text style={styles.sectionTitle}>新增課程</Text>
+              <TextInput style={styles.courseInput} value={title} onChangeText={setTitle} placeholder="課程名稱" placeholderTextColor="#756b62" />
+              <TextInput style={styles.courseInput} value={timeText} onChangeText={setTimeText} placeholder="課程時間，例如 6/21 19:00" placeholderTextColor="#756b62" />
+              <TextInput style={styles.courseInput} value={location} onChangeText={setLocation} placeholder="課程地點" placeholderTextColor="#756b62" />
+              <View style={styles.courseFormRow}>
+                <TextInput style={[styles.courseInput, styles.courseFormField]} value={level} onChangeText={setLevel} placeholder="程度" placeholderTextColor="#756b62" />
+                <TextInput style={[styles.courseInput, styles.courseFormField]} value={capacity} onChangeText={setCapacity} keyboardType="number-pad" placeholder="名額" placeholderTextColor="#756b62" />
+                <TextInput style={[styles.courseInput, styles.courseFormField]} value={price} onChangeText={setPrice} keyboardType="number-pad" placeholder="價格" placeholderTextColor="#756b62" />
+              </View>
+              <TextInput style={[styles.courseInput, styles.courseTextarea]} value={description} onChangeText={setDescription} multiline placeholder="課程說明" placeholderTextColor="#756b62" />
+              <View style={styles.paymentActions}>
+                <GoldButton label={loading ? '新增中...' : '新增課程'} onPress={createCourse} disabled={loading} />
+                <Pressable style={styles.secondaryOutlineButton} onPress={() => setCourseFormOpen(false)}>
+                  <Text style={styles.secondaryOutlineText}>取消</Text>
+                </Pressable>
+              </View>
             </View>
-            <TextInput style={[styles.courseInput, styles.courseTextarea]} value={description} onChangeText={setDescription} multiline placeholder="課程說明" placeholderTextColor="#756b62" />
-            <GoldButton label={loading ? '新增中...' : '新增課程'} onPress={createCourse} disabled={loading} />
-          </View>
+          )}
         </>
       )}
 
@@ -1239,6 +1259,7 @@ function CoachProfilesPanelV2({ user }: { user: AuthUser }) {
   const [bio, setBio] = useState('');
   const [specialties, setSpecialties] = useState('');
   const [message, setMessage] = useState('');
+  const [coachFormOpen, setCoachFormOpen] = useState(false);
 
   async function loadCoaches() {
     try {
@@ -1266,6 +1287,7 @@ function CoachProfilesPanelV2({ user }: { user: AuthUser }) {
         body: JSON.stringify({ bio, specialties }),
       });
       setMyProfile(profile);
+      setCoachFormOpen(false);
       setMessage('教練個人頁已更新');
       await loadCoaches();
     } catch (error) {
@@ -1282,13 +1304,23 @@ function CoachProfilesPanelV2({ user }: { user: AuthUser }) {
           <Text style={styles.profileMeta}>評分、評論、專長、課程紀錄與收入統計</Text>
         </View>
       </View>
-      {canEdit && (
+      {canEdit && !coachFormOpen && (
+        <Pressable style={styles.courseAddButton} onPress={() => setCoachFormOpen(true)}>
+          <Text style={styles.courseActionText}>編輯我的教練頁</Text>
+        </Pressable>
+      )}
+      {canEdit && coachFormOpen && (
         <View style={styles.courseForm}>
           <Text style={styles.sectionTitle}>編輯我的教練頁</Text>
           <TextInput style={[styles.courseInput, styles.courseTextarea]} value={bio} onChangeText={setBio} multiline placeholder="教練介紹" placeholderTextColor="#756b62" />
           <TextInput style={styles.courseInput} value={specialties} onChangeText={setSpecialties} placeholder="專長，例如投籃、體能、控球" placeholderTextColor="#756b62" />
           {!!myProfile && <Text style={styles.courseMeta}>目前評分 {myProfile.averageRating || 0}/5 · {myProfile.reviewCount} 則評論</Text>}
-          <GoldButton label="儲存教練頁" onPress={saveProfile} />
+          <View style={styles.paymentActions}>
+            <GoldButton label="儲存教練頁" onPress={saveProfile} />
+            <Pressable style={styles.secondaryOutlineButton} onPress={() => setCoachFormOpen(false)}>
+              <Text style={styles.secondaryOutlineText}>取消</Text>
+            </Pressable>
+          </View>
         </View>
       )}
       {!!message && <Text style={styles.courseMessage}>{message}</Text>}
@@ -1963,6 +1995,7 @@ const styles = StyleSheet.create({
   courseStatus: { color: '#140e08', backgroundColor: '#e79b34', paddingHorizontal: 12, paddingVertical: 8, fontSize: 12, fontWeight: '900' },
   courseStatusMuted: { backgroundColor: '#474540' },
   courseStatusText: { color: '#140e08', fontSize: 12, fontWeight: '900' },
+  courseAddButton: { alignSelf: 'flex-start', borderWidth: 1, borderColor: '#d5943c', paddingHorizontal: 14, paddingVertical: 11, marginBottom: 18 },
   courseActionButton: { borderWidth: 1, borderColor: '#d5943c', paddingHorizontal: 12, paddingVertical: 9 },
   courseActionText: { color: '#f0a642', fontSize: 12, fontWeight: '900' },
   dangerButton: { borderWidth: 1, borderColor: '#7f3f38', paddingHorizontal: 12, paddingVertical: 9 },
